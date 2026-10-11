@@ -22,12 +22,13 @@ jobs:
           python-version: '3.x'
 
       - name: Install dependencies
-        run: pip install requests
+        run: pip install requests beautifulsoup4
 
       - name: Fetch Song Metadata & Update README
         run: |
           python - << 'EOF'
-          import glob, requests
+          import glob, requests, re
+          from bs4 import BeautifulSoup
 
           ttml_files = sorted(glob.glob("*.ttml"))
 
@@ -36,23 +37,42 @@ jobs:
           readme_content += "| Canción | Artista | Enlace al Archivo (.ttml) | ID de Spotify |\n"
           readme_content += "| :--- | :--- | :--- | :--- |\n"
 
+          headers = {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+          }
+
           for file in ttml_files:
               track_id = file.replace(".ttml", "").strip()
               title = "Desconocido"
               artist = "Desconocido"
               
-              # Intento de consulta en LRCLIB / API Abierta
+              # Búsqueda pública en la vista embed de Spotify
+              url = f"https://open.spotify.com/embed/track/{track_id}"
               try:
-                  res = requests.get(f"https://lrclib.net/api/get-by-spotify-id/{track_id}", timeout=5)
+                  res = requests.get(url, headers=headers, timeout=10)
                   if res.status_code == 200:
-                      data = res.json()
-                      title = data.get("trackName", "Desconocido")
-                      artist = data.get("artistName", "Desconocido")
-                      print(f"🎵 Encontrada en LRCLIB: {title} - {artist}")
+                      soup = BeautifulSoup(res.text, 'html.parser')
+                      # Extraer título de las meta tags abiertas
+                      og_title = soup.find("meta", property="og:title")
+                      og_description = soup.find("meta", property="og:description")
+                      
+                      if og_title and og_title.get("content"):
+                          title = og_title["content"]
+                      
+                      if og_description and og_description.get("content"):
+                          # La descripción suele ser "Song · Artista · Year" o "Artista · Song"
+                          desc = og_description["content"]
+                          parts = [p.strip() for p in desc.split("·")]
+                          if len(parts) >= 2:
+                              artist = parts[1] if parts[0].lower() in ["song", "canción"] else parts[0]
+                          else:
+                              artist = desc
+
+                      print(f"🎵 Encontrada en Spotify Web: {title} - {artist}")
                   else:
-                      print(f"⚠️ No encontrada en API abierta para track {track_id} (Status {res.status_code})")
+                      print(f"⚠️ Error al acceder al embed de Spotify para {track_id}: {res.status_code}")
               except Exception as e:
-                  print(f"❌ Error al consultar: {e}")
+                  print(f"❌ Error consultando web para {track_id}: {e}")
 
               readme_content += f"| **{title}** | {artist} | [`{file}`](./{file}) | `{track_id}` |\n"
 
