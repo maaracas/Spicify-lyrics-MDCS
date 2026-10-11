@@ -1,13 +1,14 @@
 name: Update README with Spotify Info
 
 on:
+  workflow_dispatch:
   push:
     paths:
       - '*.ttml'
 
 jobs:
   update-readme:
-    runs-runs-on: ubuntu-latest
+    runs-on: ubuntu-latest
     permissions:
       contents: write
 
@@ -31,10 +32,13 @@ jobs:
           python - << 'EOF'
           import os, glob, base64, requests
 
-          client_id = os.environ['CLIENT_ID']
-          client_secret = os.environ['CLIENT_SECRET']
+          client_id = os.environ.get('CLIENT_ID', '')
+          client_secret = os.environ.get('CLIENT_SECRET', '')
 
-          # Autenticación con la API de Spotify
+          if not client_id or not client_secret:
+              print("Faltan las credenciales SPOTIFY_CLIENT_ID o SPOTIFY_CLIENT_SECRET en los Secrets.")
+              exit(1)
+
           auth_str = f"{client_id}:{client_secret}"
           b64_auth = base64.b64encode(auth_str.encode()).decode()
           headers = {"Authorization": f"Basic {b64_auth}"}
@@ -44,7 +48,7 @@ jobs:
           token = res.json().get("access_token")
 
           if not token:
-              print("Error de autenticación con Spotify")
+              print("Error de autenticación con Spotify. Revisa los Secrets.")
               exit(1)
 
           spotify_headers = {"Authorization": f"Bearer {token}"}
@@ -62,7 +66,7 @@ jobs:
               if response.status_code == 200:
                   track_data = response.json()
                   title = track_data.get("name", "Desconocido")
-                  artist = ", ".join([artist["name"] for artist in track_data.get("artists", [])])
+                  artist = ", ".join([a["name"] for a in track_data.get("artists", [])])
               else:
                   title = "Desconocido"
                   artist = "Desconocido"
