@@ -27,7 +27,7 @@ jobs:
       - name: Fetch Song Metadata & Update README
         run: |
           python - << 'EOF'
-          import glob, requests, re
+          import glob, re, os, requests
           from bs4 import BeautifulSoup
 
           ttml_files = sorted(glob.glob("*.ttml"))
@@ -37,42 +37,43 @@ jobs:
           readme_content += "| Canción | Artista | Enlace al Archivo (.ttml) | ID de Spotify |\n"
           readme_content += "| :--- | :--- | :--- | :--- |\n"
 
-          headers = {
-              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-          }
-
           for file in ttml_files:
               track_id = file.replace(".ttml", "").strip()
-              title = "Desconocido"
-              artist = "Desconocido"
+              title = ""
+              artist = ""
               
-              # Búsqueda pública en la vista embed de Spotify
-              url = f"https://open.spotify.com/embed/track/{track_id}"
+              # 1. Intentar leer dentro del propio archivo TTML
               try:
-                  res = requests.get(url, headers=headers, timeout=10)
-                  if res.status_code == 200:
-                      soup = BeautifulSoup(res.text, 'html.parser')
-                      # Extraer título de las meta tags abiertas
-                      og_title = soup.find("meta", property="og:title")
-                      og_description = soup.find("meta", property="og:description")
+                  with open(file, 'r', encoding='utf-8') as f:
+                      content = f.read()
                       
-                      if og_title and og_title.get("content"):
-                          title = og_title["content"]
-                      
-                      if og_description and og_description.get("content"):
-                          # La descripción suele ser "Song · Artista · Year" o "Artista · Song"
-                          desc = og_description["content"]
-                          parts = [p.strip() for p in desc.split("·")]
-                          if len(parts) >= 2:
-                              artist = parts[1] if parts[0].lower() in ["song", "canción"] else parts[0]
-                          else:
-                              artist = desc
-
-                      print(f"🎵 Encontrada en Spotify Web: {title} - {artist}")
-                  else:
-                      print(f"⚠️ Error al acceder al embed de Spotify para {track_id}: {res.status_code}")
+                      # Buscar metadatos en etiquetas ttm:title o ttm:agent/metadata
+                      t_match = re.search(r'<ttm:title>(.*?)</ttm:title>', content, re.IGNORECASE)
+                      if t_match:
+                          title = t_match.group(1).strip()
+                          
+                      a_match = re.search(r'<ttm:artist>(.*?)</ttm:artist>', content, re.IGNORECASE)
+                      if a_match:
+                          artist = a_match.group(1).strip()
               except Exception as e:
-                  print(f"❌ Error consultando web para {track_id}: {e}")
+                  print(f"Error leyendo archivo {file}: {e}")
+
+              # 2. Si no los encuentra dentro del TTML, consultar el oEmbed público de Spotify en JSON
+              if not title or not artist:
+                  try:
+                      oembed_url = f"https://open.spotify.com/oembed?url=https://open.spotify.com/track/{track_id}"
+                      res = requests.get(oembed_url, timeout=5)
+                      if res.status_code == 200:
+                          data = res.json()
+                          title = data.get("title", title)
+                          # El title en oEmbed suele venir como "Nombre Canción" y el autor en "author_name"
+                          artist = data.get("author_name", artist)
+                  except Exception as e:
+                      print(f"Error oEmbed para {track_id}: {e}")
+
+              # Valores por defecto si nada responde
+              if not title: title = "Desconocido"
+              if not artist: artist = "Desconocido"
 
               readme_content += f"| **{title}** | {artist} | [`{file}`](./{file}) | `{track_id}` |\n"
 
