@@ -30,26 +30,31 @@ jobs:
           CLIENT_SECRET: ${{ secrets.SPOTIFY_CLIENT_SECRET }}
         run: |
           python - << 'EOF'
-          import os, glob, base64, requests
+          import os, glob, requests
 
-          client_id = os.environ.get('CLIENT_ID', '')
-          client_secret = os.environ.get('CLIENT_SECRET', '')
+          client_id = os.environ.get('CLIENT_ID', '').strip()
+          client_secret = os.environ.get('CLIENT_SECRET', '').strip()
 
           if not client_id or not client_secret:
-              print("Faltan las credenciales SPOTIFY_CLIENT_ID o SPOTIFY_CLIENT_SECRET en los Secrets.")
+              print("❌ ERROR: No se encontraron los secretos CLIENT_ID o CLIENT_SECRET.")
               exit(1)
 
-          auth_str = f"{client_id}:{client_secret}"
-          b64_auth = base64.b64encode(auth_str.encode()).decode()
-          headers = {"Authorization": f"Basic {b64_auth}"}
-          data = {"grant_type": "client_credentials"}
+          # Petición de token directa a Spotify
+          auth_data = {
+              "grant_type": "client_credentials",
+              "client_id": client_id,
+              "client_secret": client_secret
+          }
           
-          res = requests.post("https://accounts.spotify.com/api/token", headers=headers, data=data)
-          token = res.json().get("access_token")
+          res = requests.post("https://accounts.spotify.com/api/token", data=auth_data)
+          res_json = res.json()
+          token = res_json.get("access_token")
 
           if not token:
-              print("Error de autenticación con Spotify. Revisa los Secrets.")
+              print(f"❌ ERROR AUTENTICACIÓN SPOTIFY ({res.status_code}): {res_json}")
               exit(1)
+
+          print("✅ Autenticación con Spotify exitosa.")
 
           spotify_headers = {"Authorization": f"Bearer {token}"}
           ttml_files = sorted(glob.glob("*.ttml"))
@@ -60,14 +65,16 @@ jobs:
           readme_content += "| :--- | :--- | :--- | :--- |\n"
 
           for file in ttml_files:
-              track_id = file.replace(".ttml", "")
+              track_id = file.replace(".ttml", "").strip()
               response = requests.get(f"https://api.spotify.com/v1/tracks/{track_id}", headers=spotify_headers)
               
               if response.status_code == 200:
                   track_data = response.json()
                   title = track_data.get("name", "Desconocido")
                   artist = ", ".join([a["name"] for a in track_data.get("artists", [])])
+                  print(f"🎵 Encontrada: {title} - {artist}")
               else:
+                  print(f"⚠️ Error al obtener track {track_id} ({response.status_code}): {response.text}")
                   title = "Desconocido"
                   artist = "Desconocido"
 
