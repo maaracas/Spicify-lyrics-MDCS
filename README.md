@@ -1,10 +1,10 @@
 # 🎵 Mis Letras Sincronizadas
 
-Lista e índice de las letras sincronizadas alojadas para la app.
+Lista e índice de las letras sincronizadas actualizadas automáticamente.
 
-| Canción | Artista | ID de Spotify (Archivo) |
-| :--- | :--- | :--- |
-| Swear On My Sex Life | Mckayla Twiggs | [`6Dc2SEXILrBwqWmB1pdqrK.ttml`](./6Dc2SEXILrBwqWmB1pdqrK.ttml) |
-| Fetish | Nessa Barrett | [`1qiGwXHfxjtCUt9kt8nNx4.ttml`](./1qiGwXHfxjtCUt9kt8nNx4.ttml) |
-| [Título de la canción] | [Artista] | [`1qeDiZrY4LBsycOVHSIYWI.ttml`](./1qeDiZrY4LBsycOVHSIYWI.ttml) |
-| [Título de la canción] | [Artista] | [`5PEqMbuAMDRMKo62Tv2DRI.ttml`](./5PEqMbuAMDRMKo62Tv2DRI.ttml) |
+| Canción | Artista | Enlace al Archivo (.ttml) | ID de Spotify |
+| :--- | :--- | :--- | :--- |
+| **Desconocido** | Desconocido | [`1qeDiZrY4LBsycOVHSlYWI.ttml`](./1qeDiZrY4LBsycOVHSlYWI.ttml) | `1qeDiZrY4LBsycOVHSlYWI` |
+| **Desconocido** | Desconocido | [`1qiGwXHfxjtCUt9kt8nNx4.ttml`](./1qiGwXHfxjtCUt9kt8nNx4.ttml) | `1qiGwXHfxjtCUt9kt8nNx4` |
+| **Desconocido** | Desconocido | [`5PEqMbuAMDRMKo62Tv2DRi.ttml`](./5PEqMbuAMDRMKo62Tv2DRi.ttml) | `5PEqMbuAMDRMKo62Tv2DRi` |
+| **Desconocido** | Desconocido | [`6Dc2SEXILrBwqWmB1pdqrK.ttml`](./6Dc2SEXILrBwqWmB1pdqrK.ttml) | `6Dc2SEXILrBwqWmB1pdqrK` |
