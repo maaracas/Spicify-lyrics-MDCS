@@ -1,0 +1,81 @@
+name: Update README with Spotify Info
+
+on:
+  push:
+    paths:
+      - '*.ttml'
+
+jobs:
+  update-readme:
+    runs-runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Fetch Song Metadata & Update README
+        env:
+          CLIENT_ID: ${{ secrets.SPOTIFY_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.SPOTIFY_CLIENT_SECRET }}
+        run: |
+          python - << 'EOF'
+          import os, glob, base64, requests
+
+          client_id = os.environ['CLIENT_ID']
+          client_secret = os.environ['CLIENT_SECRET']
+
+          # Autenticación con la API de Spotify
+          auth_str = f"{client_id}:{client_secret}"
+          b64_auth = base64.b64encode(auth_str.encode()).decode()
+          headers = {"Authorization": f"Basic {b64_auth}"}
+          data = {"grant_type": "client_credentials"}
+          
+          res = requests.post("https://accounts.spotify.com/api/token", headers=headers, data=data)
+          token = res.json().get("access_token")
+
+          if not token:
+              print("Error de autenticación con Spotify")
+              exit(1)
+
+          spotify_headers = {"Authorization": f"Bearer {token}"}
+          ttml_files = sorted(glob.glob("*.ttml"))
+
+          readme_content = "# 🎵 Mis Letras Sincronizadas\n\n"
+          readme_content += "Lista e índice de las letras sincronizadas actualizadas automáticamente.\n\n"
+          readme_content += "| Canción | Artista | Enlace al Archivo (.ttml) | ID de Spotify |\n"
+          readme_content += "| :--- | :--- | :--- | :--- |\n"
+
+          for file in ttml_files:
+              track_id = file.replace(".ttml", "")
+              response = requests.get(f"https://api.spotify.com/v1/tracks/{track_id}", headers=spotify_headers)
+              
+              if response.status_code == 200:
+                  track_data = response.json()
+                  title = track_data.get("name", "Desconocido")
+                  artist = ", ".join([artist["name"] for artist in track_data.get("artists", [])])
+              else:
+                  title = "Desconocido"
+                  artist = "Desconocido"
+
+              readme_content += f"| **{title}** | {artist} | [`{file}`](./{file}) | `{track_id}` |\n"
+
+          with open("README.md", "w", encoding="utf-8") as f:
+              f.write(readme_content)
+          EOF
+
+      - name: Commit and push if changed
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git add README.md
+          git diff --quiet && git diff --staged --quiet || (git commit -m "auto: update README with track info" && git push)
