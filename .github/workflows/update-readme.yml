@@ -1,4 +1,4 @@
-name: Update README with Spotify Info
+name: Update README with Track Info
 
 on:
   workflow_dispatch:
@@ -25,38 +25,10 @@ jobs:
         run: pip install requests
 
       - name: Fetch Song Metadata & Update README
-        env:
-          CLIENT_ID: ${{ secrets.SPOTIFY_CLIENT_ID }}
-          CLIENT_SECRET: ${{ secrets.SPOTIFY_CLIENT_SECRET }}
         run: |
           python - << 'EOF'
-          import os, glob, requests
+          import glob, requests
 
-          client_id = os.environ.get('CLIENT_ID', '').strip()
-          client_secret = os.environ.get('CLIENT_SECRET', '').strip()
-
-          if not client_id or not client_secret:
-              print("❌ ERROR: No se encontraron los secretos CLIENT_ID o CLIENT_SECRET.")
-              exit(1)
-
-          # Petición de token directa a Spotify
-          auth_data = {
-              "grant_type": "client_credentials",
-              "client_id": client_id,
-              "client_secret": client_secret
-          }
-          
-          res = requests.post("https://accounts.spotify.com/api/token", data=auth_data)
-          res_json = res.json()
-          token = res_json.get("access_token")
-
-          if not token:
-              print(f"❌ ERROR AUTENTICACIÓN SPOTIFY ({res.status_code}): {res_json}")
-              exit(1)
-
-          print("✅ Autenticación con Spotify exitosa.")
-
-          spotify_headers = {"Authorization": f"Bearer {token}"}
           ttml_files = sorted(glob.glob("*.ttml"))
 
           readme_content = "# 🎵 Mis Letras Sincronizadas\n\n"
@@ -66,17 +38,21 @@ jobs:
 
           for file in ttml_files:
               track_id = file.replace(".ttml", "").strip()
-              response = requests.get(f"https://api.spotify.com/v1/tracks/{track_id}", headers=spotify_headers)
+              title = "Desconocido"
+              artist = "Desconocido"
               
-              if response.status_code == 200:
-                  track_data = response.json()
-                  title = track_data.get("name", "Desconocido")
-                  artist = ", ".join([a["name"] for a in track_data.get("artists", [])])
-                  print(f"🎵 Encontrada: {title} - {artist}")
-              else:
-                  print(f"⚠️ Error al obtener track {track_id} ({response.status_code}): {response.text}")
-                  title = "Desconocido"
-                  artist = "Desconocido"
+              # Intento de consulta en LRCLIB / API Abierta
+              try:
+                  res = requests.get(f"https://lrclib.net/api/get-by-spotify-id/{track_id}", timeout=5)
+                  if res.status_code == 200:
+                      data = res.json()
+                      title = data.get("trackName", "Desconocido")
+                      artist = data.get("artistName", "Desconocido")
+                      print(f"🎵 Encontrada en LRCLIB: {title} - {artist}")
+                  else:
+                      print(f"⚠️ No encontrada en API abierta para track {track_id} (Status {res.status_code})")
+              except Exception as e:
+                  print(f"❌ Error al consultar: {e}")
 
               readme_content += f"| **{title}** | {artist} | [`{file}`](./{file}) | `{track_id}` |\n"
 
