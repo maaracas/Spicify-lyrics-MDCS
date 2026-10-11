@@ -42,7 +42,7 @@ jobs:
               title = "Desconocido"
               artist = "Desconocido"
 
-              # 1. Petición directa a oEmbed de Spotify
+              # Petición limpia a oEmbed de Spotify
               try:
                   oembed_url = f"https://open.spotify.com/oembed?url={spotify_url}"
                   res = requests.get(oembed_url, timeout=10)
@@ -50,27 +50,13 @@ jobs:
                       data = res.json()
                       title = data.get("title", title)
                       artist = data.get("author_name", artist)
-                      print(f"✅ Exito oEmbed -> ID: {track_id} | Título: {title} | Artista: {artist}")
+                      print(f"✅ ID: {track_id} -> Título: {title} | Artista: {artist}")
                   else:
                       print(f"⚠️ oEmbed respondió status {res.status_code} para ID: {track_id}")
               except Exception as e:
                   print(f"❌ Error al consultar oEmbed para ID {track_id}: {e}")
 
-              # 2. Respaldo secundario si oEmbed no devolvió artista
-              if artist == "Desconocido":
-                  try:
-                      # API de iTunes pública para buscar el tema por nombre si tenemos título
-                      if title != "Desconocido":
-                          itunes_url = f"https://itunes.apple.com/search?term={title}&entity=song&limit=1"
-                          res_it = requests.get(itunes_url, timeout=5)
-                          if res_it.status_code == 200:
-                              it_data = res_it.json()
-                              if it_data.get("resultCount", 0) > 0:
-                                  artist = it_data["results"][0].get("artistName", artist)
-                  except Exception as e:
-                      print(f"Error respaldo iTunes: {e}")
-
-              readme_content += f"| **{title}** | {artist} | [Escuchar en Spotify 🎧]({spotify_url}) | [`{file}`](./{file}) | `{track_id}` |\n"
+              readme_content += f"| **{title}** | {artist} | [Spotify link]({spotify_url}) | [`{file}`](./{file}) | `{track_id}` |\n"
 
           with open("README.md", "w", encoding="utf-8") as f:
               f.write(readme_content)
