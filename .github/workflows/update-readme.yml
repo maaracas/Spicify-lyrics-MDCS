@@ -32,12 +32,11 @@ jobs:
 
           ttml_files = sorted(glob.glob("*.ttml"))
 
-          readme_content = "# 🎵 Mis Letras Sincronizadas\n\n"
-          readme_content += "Lista e índice de las letras sincronizadas actualizadas automáticamente.\n\n"
+          readme_content = "# TTML Songs IDs\n\n"
+          readme_content += "Índice de IDs TTML y letras sincronizadas.\n\n"
           readme_content += "| Canción | Artista | Enlace en Spotify | Archivo (.ttml) | ID de Spotify |\n"
           readme_content += "| :--- | :--- | :--- | :--- | :--- |\n"
 
-          # Cabeceras simulando un bot de redes (WhatsApp/Twitter) para que Spotify devuelva las etiquetas OpenGraph completas
           headers = {
               "User-Agent": "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)",
               "Accept-Language": "es-ES,es;q=0.9,en;q=0.8"
@@ -49,26 +48,21 @@ jobs:
               title = "Desconocido"
               artist = "Desconocido"
 
-              # 1. Probar a extraer de Open Graph pasando como bot de vista previa
               try:
                   res = requests.get(spotify_url, headers=headers, timeout=10)
                   if res.status_code == 200:
                       soup = BeautifulSoup(res.text, 'html.parser')
                       
-                      # Titulo
                       og_title = soup.find("meta", property="og:title")
                       if og_title and og_title.get("content"):
                           title = og_title["content"].strip()
 
-                      # Artista desde meta tags de música / description
                       og_desc = soup.find("meta", property="og:description")
                       if og_desc and og_desc.get("content"):
                           desc = og_desc["content"]
-                          # Formato clásico de Spotify en OG: "Artista · Song · Año" o "Song · Artista"
                           if "·" in desc:
                               parts = [p.strip() for p in desc.split("·")]
                               if len(parts) >= 2:
-                                  # Si la primera palabra no es "Song" ni "Single", ese es el artista
                                   if parts[0].lower() not in ["song", "canción", "single"]:
                                       artist = parts[0]
                                   else:
@@ -80,7 +74,6 @@ jobs:
               except Exception as e:
                   print(f"Error parseando OG para {track_id}: {e}")
 
-              # 2. Respaldo vía oEmbed oficial si sigue estando indeterminado
               if artist == "Desconocido" or title == "Desconocido":
                   try:
                       oembed_url = f"https://open.spotify.com/oembed?url={spotify_url}"
@@ -94,7 +87,6 @@ jobs:
                   except Exception:
                       pass
 
-              print(f"✅ Resultado para {track_id}: [{title}] - [{artist}]")
               readme_content += f"| **{title}** | {artist} | [Spotify link]({spotify_url}) | [`{file}`](./{file}) | `{track_id}` |\n"
 
           with open("README.md", "w", encoding="utf-8") as f:
