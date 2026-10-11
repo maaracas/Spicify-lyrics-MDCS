@@ -22,90 +22,55 @@ jobs:
           python-version: '3.x'
 
       - name: Install dependencies
-        run: pip install requests beautifulsoup4
+        run: pip install requests
 
       - name: Fetch Song Metadata & Update README
         run: |
           python - << 'EOF'
-          import glob, re, requests
-          from bs4 import BeautifulSoup
+          import glob, requests
 
           ttml_files = sorted(glob.glob("*.ttml"))
 
           readme_content = "# 🎵 Mis Letras Sincronizadas\n\n"
           readme_content += "Lista e índice de las letras sincronizadas actualizadas automáticamente.\n\n"
-          readme_content += "| Canción | Artista | Enlace al Archivo (.ttml) | ID de Spotify |\n"
-          readme_content += "| :--- | :--- | :--- | :--- |\n"
-
-          # User Agent de Bot de Redes Sociales (fuerza a Spotify a entregar metadatos Open Graph limpios)
-          bot_headers = {
-              "User-Agent": "Twitterbot/1.0",
-              "Accept-Language": "en-US,en;q=0.9"
-          }
+          readme_content += "| Canción | Artista | Enlace en Spotify | Archivo (.ttml) | ID de Spotify |\n"
+          readme_content += "| :--- | :--- | :--- | :--- | :--- |\n"
 
           for file in ttml_files:
               track_id = file.replace(".ttml", "").strip()
+              spotify_url = f"https://open.spotify.com/track/{track_id}"
               title = "Desconocido"
               artist = "Desconocido"
 
-              # --- NIVEL 1: Meta-tags directas simulando vista previa de Twitter/WhatsApp ---
+              # 1. Petición directa a oEmbed de Spotify
               try:
-                  track_url = f"https://open.spotify.com/track/{track_id}"
-                  res = requests.get(track_url, headers=bot_headers, timeout=8)
+                  oembed_url = f"https://open.spotify.com/oembed?url={spotify_url}"
+                  res = requests.get(oembed_url, timeout=10)
                   if res.status_code == 200:
-                      soup = BeautifulSoup(res.text, 'html.parser')
-                      
-                      # Extraer Título
-                      og_title = soup.find("meta", property="og:title")
-                      if og_title and og_title.get("content"):
-                          title = og_title["content"].strip()
-
-                      # Extraer Artista
-                      meta_artist = soup.find("meta", name="twitter:audio:artist_name") or soup.find("meta", property="music:musician")
-                      if meta_artist and meta_artist.get("content"):
-                          artist = meta_artist["content"].strip()
-                      else:
-                          # Parsear og:description (ej: "Listen to Swear On My Sex Life on Spotify. McKayla Twiggs · Song · 2024")
-                          og_desc = soup.find("meta", property="og:description")
-                          if og_desc and og_desc.get("content"):
-                              desc = og_desc["content"]
-                              if "·" in desc:
-                                  parts = [p.strip() for p in desc.split("·")]
-                                  # Si el formato es "Artista · Song · Año"
-                                  if len(parts) >= 2:
-                                      artist = parts[0]
-                              elif "by" in desc.lower():
-                                  m = re.search(r'by\s+(.*?)\s+on\s+Spotify', desc, re.IGNORECASE)
-                                  if m:
-                                      artist = m.group(1).strip()
+                      data = res.json()
+                      title = data.get("title", title)
+                      artist = data.get("author_name", artist)
+                      print(f"✅ Exito oEmbed -> ID: {track_id} | Título: {title} | Artista: {artist}")
+                  else:
+                      print(f"⚠️ oEmbed respondió status {res.status_code} para ID: {track_id}")
               except Exception as e:
-                  print(f"Error Nivel 1 para {track_id}: {e}")
+                  print(f"❌ Error al consultar oEmbed para ID {track_id}: {e}")
 
-              # --- NIVEL 2: Rescate vía oEmbed oficial de Spotify ---
-              if title == "Desconocido" or artist == "Desconocido":
+              # 2. Respaldo secundario si oEmbed no devolvió artista
+              if artist == "Desconocido":
                   try:
-                      oembed_url = f"https://open.spotify.com/oembed?url=https://open.spotify.com/track/{track_id}"
-                      res_oe = requests.get(oembed_url, timeout=5)
-                      if res_oe.status_code == 200:
-                          data = res_oe.json()
-                          if title == "Desconocido":
-                              title = data.get("title", title)
-                          
-                          # Si no tenemos artista, buscar enlaces de artista dentro del HTML devuelto en oEmbed
-                          if artist == "Desconocido" and "html" in data:
-                              html_content = data["html"]
-                              soup_oe = BeautifulSoup(html_content, 'html.parser')
-                              # Buscar etiquetas de artista o enlaces /artist/
-                              artist_links = soup_oe.find_all("a", href=re.compile(r'/artist/'))
-                              if artist_links:
-                                  artists_list = [a.get_text().strip() for a in artist_links if a.get_text().strip()]
-                                  if artists_list:
-                                      artist = ", ".join(artists_list)
+                      # API de iTunes pública para buscar el tema por nombre si tenemos título
+                      if title != "Desconocido":
+                          itunes_url = f"https://itunes.apple.com/search?term={title}&entity=song&limit=1"
+                          res_it = requests.get(itunes_url, timeout=5)
+                          if res_it.status_code == 200:
+                              it_data = res_it.json()
+                              if it_data.get("resultCount", 0) > 0:
+                                  artist = it_data["results"][0].get("artistName", artist)
                   except Exception as e:
-                      print(f"Error Nivel 2 para {track_id}: {e}")
+                      print(f"Error respaldo iTunes: {e}")
 
-              print(f"✅ Resultado para {track_id}: [{title}] de [{artist}]")
-              readme_content += f"| **{title}** | {artist} | [`{file}`](./{file}) | `{track_id}` |\n"
+              readme_content += f"| **{title}** | {artist} | [Escuchar en Spotify 🎧]({spotify_url}) | [`{file}`](./{file}) | `{track_id}` |\n"
 
           with open("README.md", "w", encoding="utf-8") as f:
               f.write(readme_content)
