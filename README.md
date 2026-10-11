@@ -1,4 +1,4 @@
-Letras Sincronizadas
+**Letras Sincronizadas**
 
 Lista e índice de las letras sincronizadas actualizadas automáticamente.
 
