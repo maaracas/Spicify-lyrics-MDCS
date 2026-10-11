@@ -37,59 +37,74 @@ jobs:
           readme_content += "| Canción | Artista | Enlace al Archivo (.ttml) | ID de Spotify |\n"
           readme_content += "| :--- | :--- | :--- | :--- |\n"
 
+          # User Agent de Bot de Redes Sociales (fuerza a Spotify a entregar metadatos Open Graph limpios)
+          bot_headers = {
+              "User-Agent": "Twitterbot/1.0",
+              "Accept-Language": "en-US,en;q=0.9"
+          }
+
           for file in ttml_files:
               track_id = file.replace(".ttml", "").strip()
               title = "Desconocido"
               artist = "Desconocido"
 
-              # 1. Probar vía oEmbed oficial de Spotify
+              # --- NIVEL 1: Meta-tags directas simulando vista previa de Twitter/WhatsApp ---
               try:
-                  oembed_url = f"https://open.spotify.com/oembed?url=https://open.spotify.com/track/{track_id}"
-                  res = requests.get(oembed_url, timeout=5)
+                  track_url = f"https://open.spotify.com/track/{track_id}"
+                  res = requests.get(track_url, headers=bot_headers, timeout=8)
                   if res.status_code == 200:
-                      data = res.json()
-                      title = data.get("title", "Desconocido")
+                      soup = BeautifulSoup(res.text, 'html.parser')
                       
-                      # Intentar extraer artista del título si viene como "Song by Artist"
-                      if "by" in title:
-                          parts = title.split("by")
-                          title = parts[0].strip()
-                          artist = parts[1].strip()
-                      elif "author_name" in data and data["author_name"]:
-                          artist = data["author_name"]
-                      
-                      # Si hay HTML embed, extraer iframe title que suele tener "Song by Artist"
-                      if artist == "Desconocido" and "html" in data:
-                          soup = BeautifulSoup(data["html"], 'html.parser')
-                          iframe = soup.find('iframe')
-                          if iframe and iframe.get('title'):
-                              iframe_title = iframe['title']
-                              if "by" in iframe_title:
-                                  parts = iframe_title.split("by")
-                                  title = parts[0].replace("Spotify Embed:", "").strip()
-                                  artist = parts[1].strip()
-              except Exception as e:
-                  print(f"Error oEmbed para {track_id}: {e}")
+                      # Extraer Título
+                      og_title = soup.find("meta", property="og:title")
+                      if og_title and og_title.get("content"):
+                          title = og_title["content"].strip()
 
-              # 2. Si sigue desconocido, consultar el Widget Embed directamente
+                      # Extraer Artista
+                      meta_artist = soup.find("meta", name="twitter:audio:artist_name") or soup.find("meta", property="music:musician")
+                      if meta_artist and meta_artist.get("content"):
+                          artist = meta_artist["content"].strip()
+                      else:
+                          # Parsear og:description (ej: "Listen to Swear On My Sex Life on Spotify. McKayla Twiggs · Song · 2024")
+                          og_desc = soup.find("meta", property="og:description")
+                          if og_desc and og_desc.get("content"):
+                              desc = og_desc["content"]
+                              if "·" in desc:
+                                  parts = [p.strip() for p in desc.split("·")]
+                                  # Si el formato es "Artista · Song · Año"
+                                  if len(parts) >= 2:
+                                      artist = parts[0]
+                              elif "by" in desc.lower():
+                                  m = re.search(r'by\s+(.*?)\s+on\s+Spotify', desc, re.IGNORECASE)
+                                  if m:
+                                      artist = m.group(1).strip()
+              except Exception as e:
+                  print(f"Error Nivel 1 para {track_id}: {e}")
+
+              # --- NIVEL 2: Rescate vía oEmbed oficial de Spotify ---
               if title == "Desconocido" or artist == "Desconocido":
                   try:
-                      embed_url = f"https://open.spotify.com/embed/track/{track_id}"
-                      headers = {"User-Agent": "Mozilla/5.0"}
-                      res = requests.get(embed_url, headers=headers, timeout=5)
-                      if res.status_code == 200:
-                          soup = BeautifulSoup(res.text, 'html.parser')
-                          script_tag = soup.find('script', id='initial-state') or soup.find('script', id='session')
-                          if script_tag:
-                              text = script_tag.string or ""
-                              # Buscar patrones de nombre y artista en el estado JS
-                              name_match = re.search(r'"name":"([^"]+)"', text)
-                              if name_match and title == "Desconocido":
-                                  title = name_match.group(1)
+                      oembed_url = f"https://open.spotify.com/oembed?url=https://open.spotify.com/track/{track_id}"
+                      res_oe = requests.get(oembed_url, timeout=5)
+                      if res_oe.status_code == 200:
+                          data = res_oe.json()
+                          if title == "Desconocido":
+                              title = data.get("title", title)
+                          
+                          # Si no tenemos artista, buscar enlaces de artista dentro del HTML devuelto en oEmbed
+                          if artist == "Desconocido" and "html" in data:
+                              html_content = data["html"]
+                              soup_oe = BeautifulSoup(html_content, 'html.parser')
+                              # Buscar etiquetas de artista o enlaces /artist/
+                              artist_links = soup_oe.find_all("a", href=re.compile(r'/artist/'))
+                              if artist_links:
+                                  artists_list = [a.get_text().strip() for a in artist_links if a.get_text().strip()]
+                                  if artists_list:
+                                      artist = ", ".join(artists_list)
                   except Exception as e:
-                      print(f"Error Embed Script para {track_id}: {e}")
+                      print(f"Error Nivel 2 para {track_id}: {e}")
 
-              print(f"Procesado: {track_id} -> {title} - {artist}")
+              print(f"✅ Resultado para {track_id}: [{title}] de [{artist}]")
               readme_content += f"| **{title}** | {artist} | [`{file}`](./{file}) | `{track_id}` |\n"
 
           with open("README.md", "w", encoding="utf-8") as f:
