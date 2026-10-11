@@ -1,6 +1,6 @@
-# 🎵 Mis Letras Sincronizadas
+# TTML Songs IDs
 
-Lista e índice de las letras sincronizadas actualizadas automáticamente.
+Índice de IDs TTML y letras sincronizadas.
 
 | Canción | Artista | Enlace en Spotify | Archivo (.ttml) | ID de Spotify |
 | :--- | :--- | :--- | :--- | :--- |
