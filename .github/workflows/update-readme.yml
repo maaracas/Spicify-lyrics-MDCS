@@ -22,12 +22,13 @@ jobs:
           python-version: '3.x'
 
       - name: Install dependencies
-        run: pip install requests
+        run: pip install requests beautifulsoup4
 
       - name: Fetch Song Metadata & Update README
         run: |
           python - << 'EOF'
           import glob, re, requests
+          from bs4 import BeautifulSoup
 
           ttml_files = sorted(glob.glob("*.ttml"))
 
@@ -36,38 +37,61 @@ jobs:
           readme_content += "| Canción | Artista | Enlace al Archivo (.ttml) | ID de Spotify |\n"
           readme_content += "| :--- | :--- | :--- | :--- |\n"
 
+          headers = {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+              "Accept-Language": "es-ES,es;q=0.9,en;q=0.8"
+          }
+
           for file in ttml_files:
               track_id = file.replace(".ttml", "").strip()
               title = "Desconocido"
               artist = "Desconocido"
 
-              # 1. Consultar el oEmbed oficial y público de Spotify
+              # 1. Intentar por scraping directo de la página web pública de Spotify (extrae meta og:title y og:description)
               try:
-                  oembed_url = f"https://open.spotify.com/oembed?url=https://open.spotify.com/track/{track_id}"
-                  res = requests.get(oembed_url, timeout=5)
+                  url = f"https://open.spotify.com/track/{track_id}"
+                  res = requests.get(url, headers=headers, timeout=10)
                   if res.status_code == 200:
-                      data = res.json()
-                      title = data.get("title", title)
+                      soup = BeautifulSoup(res.text, 'html.parser')
                       
-                      # El artista viene directamente en 'author_name'
-                      if "author_name" in data and data["author_name"]:
-                          artist = data["author_name"]
-                      
-                      print(f"🎵 Extraído oEmbed: {title} - {artist}")
-              except Exception as e:
-                  print(f"Error oEmbed para {track_id}: {e}")
+                      # Meta título
+                      og_title = soup.find("meta", property="og:title")
+                      if og_title and og_title.get("content"):
+                          title = og_title["content"].strip()
 
-              # 2. Respaldar con metadatos del archivo TTML si sigue saliendo desconocido
+                      # Meta descripción (Suele tener el formato "Canción · Artista · Año" o "Escucha Canción en Spotify. Artista · Canción · año")
+                      og_desc = soup.find("meta", property="og:description") or soup.find("meta", name="description")
+                      if og_desc and og_desc.get("content"):
+                          desc = og_desc["content"]
+                          # Buscar patrones típicos de Spotify en la meta descripción
+                          if "·" in desc:
+                              parts = [p.strip() for p in desc.split("·")]
+                              # Si el primer elemento es "Song" o "Canción", el segundo es el artista
+                              if len(parts) >= 2:
+                                  if parts[0].lower() in ["song", "canción", "single"]:
+                                      artist = parts[1]
+                                  else:
+                                      artist = parts[0]
+                          elif "by" in desc.lower():
+                              match = re.search(r'by\s+(.*?)\s+on\s+Spotify', desc, re.IGNORECASE)
+                              if match:
+                                  artist = match.group(1).strip()
+              except Exception as e:
+                  print(f"Error accediendo a Spotify Web para {track_id}: {e}")
+
+              # 2. Si el artista sigue siendo Desconocido, intentar oEmbed como respaldo secundario
               if artist == "Desconocido":
                   try:
-                      with open(file, 'r', encoding='utf-8') as f:
-                          content = f.read()
-                          a_match = re.search(r'<ttm:artist>(.*?)</ttm:artist>', content, re.IGNORECASE)
-                          if a_match:
-                              artist = a_match.group(1).strip()
+                      oembed_url = f"https://open.spotify.com/oembed?url=https://open.spotify.com/track/{track_id}"
+                      res_oe = requests.get(oembed_url, timeout=5)
+                      if res_oe.status_code == 200:
+                          data = res_oe.json()
+                          if "author_name" in data and data["author_name"]:
+                              artist = data["author_name"]
                   except Exception:
                       pass
 
+              print(f"Resultado final -> {title} | {artist}")
               readme_content += f"| **{title}** | {artist} | [`{file}`](./{file}) | `{track_id}` |\n"
 
           with open("README.md", "w", encoding="utf-8") as f:
