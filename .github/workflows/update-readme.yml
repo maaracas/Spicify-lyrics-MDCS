@@ -5,6 +5,8 @@ on:
   push:
     paths:
       - '*.ttml'
+  # Detectar la eliminación de archivos .ttml
+  repository_dispatch:
 
 jobs:
   update-readme:
@@ -30,6 +32,7 @@ jobs:
           import glob, re, requests
           from bs4 import BeautifulSoup
 
+          # Obtener únicamente los archivos .ttml que existen actualmente en el repositorio
           ttml_files = sorted(glob.glob("*.ttml"))
 
           readme_content = "# TTML Songs IDs\n\n"
